@@ -1,0 +1,94 @@
+---
+title: "MachineLearning Final Project"
+date: "June 16, 2015"
+output: html_document
+---
+
+```{r processor,echo=FALSE,results="hide"}
+library(doParallel)
+cl <- makeCluster(detectCores())
+registerDoParallel(cl)
+```
+
+##Part 1: Loading and Cleaning Data
+<br>
+
+####The first steps we will take will be to load in the training and test data sets into R, and remove the columns from the training set that contain variables which likely are not relavent to predicting **classe**. We won't worry about subsetting any data tables beyond that yet. I will assume the .csv files are in the user's working dir.
+<br>
+
+```{r clean,echo=TRUE}
+library(caret)
+library(stats)
+rawtraining <- read.csv("pml-training.csv",stringsAsFactors=FALSE)
+rawtesting <- read.csv("pml-testing.csv",stringsAsFactors=FALSE)
+```
+<br>
+
+####We should then run a names(rawtraining) to check out the variable names and start thinking about which ones we can remove. We should also use the View() function in R studio to see if there are any columns containing NA or blank data.
+<br>
+```{r observe,echo=TRUE,results="hide"}
+names(rawtraining)
+View(rawtraining)
+```
+<br>
+
+####Let's start chopping down those NA and blank columns in the rawtraining set:
+<br>
+```{r cleaningdata,echo=TRUE,results="hide"}
+rawtraining <- rawtraining[,!apply(rawtraining,2,function(x) any(is.na(x)))]
+#This code removes all columns with at least 1 NA value
+rawtraining <- rawtraining[!sapply(rawtraining, function(x) any(x == ""))]
+#This code removes all columns with at least 1 blank value
+str(rawtraining)
+```
+<br>
+
+####Finally, we should remove the first 7 columns of the training set, as these columns include values which identify the participants, and are not data coming from the body sensors.
+<br>
+```{r removelast,echo=TRUE}
+cleantraining <- rawtraining[,-(1:7)]
+#One very last thing; the $classe variable needs to be considered a factor instead of a character:
+cleantraining$classe <- as.factor(cleantraining$classe)
+```
+<br>
+
+##Part 2: Splitting the Training Set and Producing Model
+<br>
+
+####Next, we'll randomly split the cleantraining set into a training and validation set, with a p of .75:
+<br>
+```{r splitset,echo=TRUE}
+set.seed(500)
+inTrain <- createDataPartition(y=cleantraining$classe,p=0.75, list=FALSE)
+training <- cleantraining[inTrain,]
+validation <- cleantraining[-inTrain,]
+```
+<br>
+
+####We're now ready to create our model. We'll use the randomforest method using principle component preprocessing on the 52 variables we have to predict with. We'll then run a confusionmatrix to see how well our model predicted the results of our validation set. If we are satisfied with these results, we can apply the model to the real test (evaluation) set.
+<br>
+ 
+```{r makemodel,echo=TRUE}
+set.seed(500)
+suppressWarnings(modelFit <- train(classe ~ .,method="rf",preProcess="pca",data=training))
+#Let's see how our model performed on the validation set
+confusionMatrix(validation$classe,predict(modelFit,validation))
+```
+<br>
+
+####Looking at our randommatrix output, I think we should be confident that our model will prove highly accurate on the test data set, with an accuracy of .980. The statistics tell us that there's a 95% confidence for the accuracy to be between .976 and .983, which means our error is around 2%. 
+<br>
+
+##Part 3: Applying the Model to the Test Set
+<br>
+
+####We can now use **modelFit** to predict the classe variable for the 20 test set observations.
+
+```{r predict,echo=TRUE}
+prediction <- predict(modelFit,rawtesting)
+rawtesting$finalanswers <- prediction
+head(rawtesting$finalanswers,20)
+```
+<br>
+ 
+
